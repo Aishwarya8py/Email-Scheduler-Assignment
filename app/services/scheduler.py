@@ -10,9 +10,7 @@ from .weather import fetch_weather
 
 
 def render_template(template: str, ctx: dict) -> str:
-    """
-    Very simple {{key}} template replacement.
-    """
+   
     result = template
     for k, v in ctx.items():
         result = result.replace("{{" + k + "}}", str(v))
@@ -20,11 +18,9 @@ def render_template(template: str, ctx: dict) -> str:
 
 
 def _parse_send_at_utc(value: Any) -> datetime | None:
-    """
-    Handle send_at_utc whether it's stored as datetime or ISO string.
-    """
+   
     if isinstance(value, datetime):
-        # ensure it is timezone aware
+        
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
         return value
@@ -42,16 +38,11 @@ def _parse_send_at_utc(value: Any) -> datetime | None:
 
 
 async def process_due_schedules():
-    """
-    Called periodically by our background loop (every 30 seconds).
-    1. Fetch all schedules with status = 'pending'
-    2. For each, parse send_at_utc
-    3. If send_at_utc <= now_utc -> process it
-    """
+   
     now = now_utc()
     print("[scheduler] checking pending schedules at", now.isoformat())
 
-    # 1) get all pending schedules
+   
     pending_cursor = schedules_col.find({"status": "pending"})
     pending_schedules = await pending_cursor.to_list(length=500)
 
@@ -69,7 +60,7 @@ async def process_due_schedules():
         )
 
         if send_at is None:
-            # cannot parse send_at_utc -> skip (or mark failed if you want)
+           
             continue
 
         if send_at <= now:
@@ -82,12 +73,9 @@ async def process_due_schedules():
 
 
 async def _send_one_schedule_console(schedule_doc: dict):
-    """
-    'Send' the email by printing it to console (console logging),
-    then mark schedule as 'sent' and log in DB.
-    """
+   
     try:
-        # 1) Fetch weather from public API
+        
         weather = fetch_weather(schedule_doc["latitude"], schedule_doc["longitude"])
         ctx = {
             "city": schedule_doc["city"],
