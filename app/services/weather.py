@@ -4,10 +4,7 @@ import requests
 
 
 def fetch_weather(lat: float, lon: float):
-    """
-    Fetch weather from Open-Meteo safely.
-    If API fails or returns bad JSON, throw a clear error.
-    """
+   
     url = (
         f"https://api.open-meteo.com/v1/forecast"
         f"?latitude={lat}&longitude={lon}&current_weather=true"
