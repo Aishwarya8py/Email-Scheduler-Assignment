@@ -10,11 +10,7 @@ from .services.scheduler import process_due_schedules
 
 background_task: asyncio.Task | None = None
 async def scheduler_loop():
-    """
-    Simple scheduler loop:
-    - runs forever
-    - every 30 seconds: calls process_due_schedules()
-    """
+  
     while True:
         await process_due_schedules()
         await asyncio.sleep(30)
@@ -22,9 +18,9 @@ async def scheduler_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global background_task
-    # 🚀 Startup: start background scheduler loop
+   
     background_task = asyncio.create_task(scheduler_loop())
-    print("Background scheduler started ✅")
+    print("Background scheduler started ")
 
     try:
         yield
