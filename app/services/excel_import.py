@@ -6,12 +6,7 @@ from app.utils.time_utils import now_utc, to_utc
 
 
 async def import_schedules_from_excel(file_bytes: bytes) -> list[str]:
-    """
-    Reads an Excel file and creates schedules.
-
-    Expected columns:
-    email, city, latitude, longitude, send_at, timezone
-    """
+   
     df = pd.read_excel(file_bytes)
     inserted_ids = []
 
