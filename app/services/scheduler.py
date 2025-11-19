@@ -3,14 +3,16 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from ..db import schedules_col, logs_col
+from ..db import logs_col, schedules_col
 from ..utils.time_utils import now_utc
+from .email_sender import send_email
 from .weather import fetch_weather
-# from .email_sender import send_email  # not used in console mode
 
 
 def render_template(template: str, ctx: dict) -> str:
-   
+    """
+    Very simple {{key}} template replacement.
+    """
     result = template
     for k, v in ctx.items():
         result = result.replace("{{" + k + "}}", str(v))
@@ -18,9 +20,11 @@ def render_template(template: str, ctx: dict) -> str:
 
 
 def _parse_send_at_utc(value: Any) -> datetime | None:
-   
+    """
+    Handle send_at_utc whether it's stored as datetime or ISO string.
+    """
     if isinstance(value, datetime):
-        
+        # ensure it is timezone aware
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
         return value
@@ -38,11 +42,16 @@ def _parse_send_at_utc(value: Any) -> datetime | None:
 
 
 async def process_due_schedules():
-   
+    """
+    Called periodically by our background loop (every 30 seconds).
+    1. Fetch all schedules with status = 'pending'
+    2. For each, parse send_at_utc
+    3. If send_at_utc <= now_utc -> process it
+    """
     now = now_utc()
     print("[scheduler] checking pending schedules at", now.isoformat())
 
-   
+    # 1) get all pending schedules
     pending_cursor = schedules_col.find({"status": "pending"})
     pending_schedules = await pending_cursor.to_list(length=500)
 
@@ -60,7 +69,7 @@ async def process_due_schedules():
         )
 
         if send_at is None:
-           
+            # cannot parse send_at_utc -> skip (or mark failed if you want)
             continue
 
         if send_at <= now:
@@ -73,9 +82,12 @@ async def process_due_schedules():
 
 
 async def _send_one_schedule_console(schedule_doc: dict):
-   
+    """
+    Fetch weather, render templates, send real email via SMTP,
+    then log + update status.
+    """
     try:
-        
+        # 1) get weather from free API
         weather = fetch_weather(schedule_doc["latitude"], schedule_doc["longitude"])
         ctx = {
             "city": schedule_doc["city"],
@@ -84,45 +96,44 @@ async def _send_one_schedule_console(schedule_doc: dict):
             "time": weather["time"],
         }
 
-        # 2) Fill subject/body templates
+        # 2) render subject/body
         subject = render_template(schedule_doc["subject"], ctx)
         body = render_template(schedule_doc["body_template"], ctx)
 
-        # 3) "Send" to console
-        print("=== EMAIL (console mode) ===")
-        print("To:     ", schedule_doc["email"])
-        print("Subject:", subject)
-        print("Body:\n", body)
-        print("============================")
+        # 3) send real email
+        print(f"[scheduler] sending email to {schedule_doc['email']}")
+        send_email(schedule_doc["email"], subject, body)
+        print("[scheduler] email sent ✅")
 
-        # 4) Log success
-        await logs_col.insert_one({
-            "schedule_id": schedule_doc["_id"],
-            "sent_at_utc": now_utc(),
-            "success": True,
-            "error": None,
-            "raw_content": {"subject": subject, "body": body},
-        })
+        # 4) log success
+        await logs_col.insert_one(
+            {
+                "schedule_id": schedule_doc["_id"],
+                "sent_at_utc": now_utc(),
+                "success": True,
+                "error": None,
+                "raw_content": {"subject": subject, "body": body},
+            }
+        )
 
-        # 5) Mark schedule as sent
+        # 5) mark schedule as sent
         await schedules_col.update_one(
-            {"_id": schedule_doc["_id"]},
-            {"$set": {"status": "sent"}}
+            {"_id": schedule_doc["_id"]}, {"$set": {"status": "sent"}}
         )
 
     except Exception as e:
         print("[scheduler] error while processing schedule:", e)
 
-        await logs_col.insert_one({
-            "schedule_id": schedule_doc["_id"],
-            "sent_at_utc": now_utc(),
-            "success": False,
-            "error": str(e),
-            "raw_content": None,
-        })
-
-        await schedules_col.update_one(
-            {"_id": schedule_doc["_id"]},
-            {"$set": {"status": "failed"}}
+        await logs_col.insert_one(
+            {
+                "schedule_id": schedule_doc["_id"],
+                "sent_at_utc": now_utc(),
+                "success": False,
+                "error": str(e),
+                "raw_content": None,
+            }
         )
 
+        await schedules_col.update_one(
+            {"_id": schedule_doc["_id"]}, {"$set": {"status": "failed"}}
+        )
