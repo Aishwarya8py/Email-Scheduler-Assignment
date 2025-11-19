@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        # 🛑 Shutdown: cancel loop
+      
         if background_task:
             background_task.cancel()
             try:
